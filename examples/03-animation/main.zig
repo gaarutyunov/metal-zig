@@ -1,13 +1,29 @@
+// Copyright 2022 Apple Inc.
+// Copyright 2026 German Arutyunov
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Ported to Zig from Apple's LearnMetalCPP sample code, and modified.
+
 //! Port of the metal-cpp "03-animation" sample: the triangle of
 //! 02-argbuffers, rotated by an angle that the CPU updates every frame.
 //!
 //! The per-frame data lives in one buffer per frame in flight, so that the CPU
 //! never writes a buffer that the GPU is still reading. A semaphore, signalled
 //! from the command buffer's completion handler, limits the frames in flight.
-const objc = @import("metal");
-const common = @import("common");
-const util = common.util;
-const math = common.math;
+const metal = @import("metal");
+const objc = metal.objc;
+const math = metal.math;
 const f3 = math.f3;
 
 const max_frames_in_flight = 3;
@@ -61,22 +77,22 @@ const Renderer = struct {
     colors: *objc.MTLBuffer,
     arg_buffer: *objc.MTLBuffer,
     frame_data: [max_frames_in_flight]*objc.MTLBuffer,
-    semaphore: util.FrameSemaphore,
+    semaphore: metal.FrameSemaphore,
     angle: f32 = 0,
     frame: usize = 0,
 
     pub fn init(device: *objc.MTLDevice) !Renderer {
-        const library = try util.newLibrary(device, shader_source);
-        const positions_buffer = try util.newBufferWithData(device, &positions);
-        const colors_buffer = try util.newBufferWithData(device, &colors);
+        const library = try metal.newLibrary(device, shader_source);
+        const positions_buffer = try metal.newBufferWithData(device, &positions);
+        const colors_buffer = try metal.newBufferWithData(device, &colors);
 
         var frame_data: [max_frames_in_flight]*objc.MTLBuffer = undefined;
-        for (&frame_data) |*buffer| buffer.* = try util.newBuffer(device, @sizeOf(FrameData));
+        for (&frame_data) |*buffer| buffer.* = try metal.newBuffer(device, @sizeOf(FrameData));
 
         return .{
             .command_queue = device.newCommandQueue() orelse return error.NoCommandQueue,
             .library = library,
-            .pipeline = try util.newRenderPipeline(device, library, .{}),
+            .pipeline = try metal.newRenderPipeline(device, library, .{}),
             .positions = positions_buffer,
             .colors = colors_buffer,
             .arg_buffer = try buildArgBuffer(device, library, positions_buffer, colors_buffer),
@@ -91,29 +107,29 @@ const Renderer = struct {
         positions_buffer: *objc.MTLBuffer,
         colors_buffer: *objc.MTLBuffer,
     ) !*objc.MTLBuffer {
-        const vertex_fn = try util.newFunction(library, "vertexMain");
-        defer common.release(vertex_fn);
+        const vertex_fn = try metal.newFunction(library, "vertexMain");
+        defer metal.release(vertex_fn);
         const arg_encoder = vertex_fn.newArgumentEncoderWithBufferIndex(0) orelse return error.NoArgumentEncoder;
-        defer common.release(arg_encoder);
+        defer metal.release(arg_encoder);
 
-        const arg_buffer = try util.newBuffer(device, arg_encoder.encodedLength());
+        const arg_buffer = try metal.newBuffer(device, arg_encoder.encodedLength());
         arg_encoder.setArgumentBuffer_offset(arg_buffer, 0);
         arg_encoder.setBuffer_offset_atIndex(positions_buffer, 0, 0);
         arg_encoder.setBuffer_offset_atIndex(colors_buffer, 0, 1);
-        util.didModify(arg_buffer);
+        metal.didModify(arg_buffer);
         return arg_buffer;
     }
 
     pub fn deinit(r: *Renderer) void {
         // Wait for the frames in flight before releasing their resources.
         r.semaphore.deinit();
-        for (r.frame_data) |buffer| common.release(buffer);
-        common.release(r.arg_buffer);
-        common.release(r.colors);
-        common.release(r.positions);
-        common.release(r.pipeline);
-        common.release(r.library);
-        common.release(r.command_queue);
+        for (r.frame_data) |buffer| metal.release(buffer);
+        metal.release(r.arg_buffer);
+        metal.release(r.colors);
+        metal.release(r.positions);
+        metal.release(r.pipeline);
+        metal.release(r.library);
+        metal.release(r.command_queue);
     }
 
     pub fn draw(r: *Renderer, view: *objc.MTKView) void {
@@ -128,8 +144,8 @@ const Renderer = struct {
         r.semaphore.signalOnCompletion(cmd);
 
         r.angle += 0.01;
-        util.contents(FrameData, frame_data_buffer).angle = r.angle;
-        util.didModify(frame_data_buffer);
+        metal.contents(FrameData, frame_data_buffer).angle = r.angle;
+        metal.didModify(frame_data_buffer);
 
         const encoder = cmd.renderCommandEncoderWithDescriptor(view.currentRenderPassDescriptor()) orelse {
             cmd.commit();
@@ -149,5 +165,5 @@ const Renderer = struct {
 };
 
 pub fn main() !void {
-    try common.app.run(Renderer, .{ .title = "03 - Animation" });
+    try metal.app.run(Renderer, .{ .title = "03 - Animation" });
 }

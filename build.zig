@@ -26,25 +26,35 @@ pub fn build(b: *std.Build) void {
     // Translate the Objective-C headers into a Zig module. The `.m` extension
     // makes translate-c parse the input as Objective-C, so that `#import` and
     // `@interface`/`@protocol` declarations are understood.
-    const metal = b.addTranslateC(.{
+    const objc = b.addTranslateC(.{
         .root_source_file = b.path("src/metal.m"),
         .target = target,
         .optimize = optimize,
     }).createModule();
 
-    // Code shared by the examples: the AppKit scaffolding, helpers and math.
-    const common = b.createModule(.{
-        .root_source_file = b.path("examples/common/root.zig"),
+    // The library, available to other packages as
+    // `b.dependency("metal", ...).module("metal")`. It re-exports the
+    // translated headers as `objc` and links the frameworks, so importing it
+    // is all an executable needs.
+    const metal = b.addModule("metal", .{
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
         .imports = &.{
-            .{ .name = "metal", .module = metal },
+            .{ .name = "objc", .module = objc },
         },
     });
+    for ([_][]const u8{ "Metal", "MetalKit", "Foundation", "AppKit", "QuartzCore" }) |framework| {
+        metal.linkFramework(framework, .{});
+    }
+    // Command line tools must link CoreGraphics for
+    // MTLCreateSystemDefaultDevice to find a device.
+    metal.linkFramework("CoreGraphics", .{});
+    metal.linkSystemLibrary("objc", .{});
 
     const test_step = b.step("test", "Run the unit tests");
-    const tests = b.addTest(.{ .root_module = common });
-    tests.root_module.linkFramework("Foundation", .{});
+    const tests = b.addTest(.{ .root_module = metal });
     test_step.dependOn(&b.addRunArtifact(tests).step);
 
     for (examples) |example| {
@@ -54,20 +64,11 @@ pub fn build(b: *std.Build) void {
                 .root_source_file = b.path(b.fmt("examples/{s}/main.zig", .{example.name})),
                 .target = target,
                 .optimize = optimize,
-                .link_libc = true,
                 .imports = &.{
                     .{ .name = "metal", .module = metal },
-                    .{ .name = "common", .module = common },
                 },
             }),
         });
-        for ([_][]const u8{ "Metal", "MetalKit", "Foundation", "AppKit", "QuartzCore" }) |framework| {
-            exe.root_module.linkFramework(framework, .{});
-        }
-        // Command line tools must link CoreGraphics for
-        // MTLCreateSystemDefaultDevice to find a device.
-        exe.root_module.linkFramework("CoreGraphics", .{});
-        exe.root_module.linkSystemLibrary("objc", .{});
         b.installArtifact(exe);
 
         const run = b.addRunArtifact(exe);

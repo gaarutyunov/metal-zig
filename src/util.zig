@@ -1,6 +1,6 @@
 //! Small helpers for the Objective-C and Metal APIs translated by translate-c.
 const std = @import("std");
-const objc = @import("metal");
+const objc = @import("objc");
 
 /// An `NSString` from a string literal. The string is autoreleased.
 pub fn nsString(comptime str: [:0]const u8) ?*objc.NSString {

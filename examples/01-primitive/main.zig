@@ -1,12 +1,28 @@
+// Copyright 2022 Apple Inc.
+// Copyright 2026 German Arutyunov
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Ported to Zig from Apple's LearnMetalCPP sample code, and modified.
+
 //! Port of the metal-cpp "01-primitive" sample: a triangle with per-vertex
 //! colors, from vertex buffers and a shader compiled at runtime.
 //!
 //! Objective-C classes and protocols are exposed by translate-c as opaque
 //! types with methods (`device.newCommandQueue()`), and `obj.as(T)` casts to
 //! a superclass or protocol.
-const objc = @import("metal");
-const common = @import("common");
-const util = common.util;
+const metal = @import("metal");
+const objc = metal.objc;
 
 const shader_source =
     \\#include <metal_stdlib>
@@ -32,14 +48,14 @@ const shader_source =
 ;
 
 /// `float3` with the layout of the Metal type: 16 bytes, 16-byte aligned.
-const f3 = common.math.f3;
+const f3 = metal.math.f3;
 
-const positions = [_]common.math.float3{
+const positions = [_]metal.math.float3{
     f3(-0.8, 0.8, 0.0),
     f3(0.0, -0.8, 0.0),
     f3(0.8, 0.8, 0.0),
 };
-const colors = [_]common.math.float3{
+const colors = [_]metal.math.float3{
     f3(1.0, 0.3, 0.2),
     f3(0.8, 1.0, 0.0),
     f3(0.8, 0.0, 1.0),
@@ -52,21 +68,21 @@ const Renderer = struct {
     colors: *objc.MTLBuffer,
 
     pub fn init(device: *objc.MTLDevice) !Renderer {
-        const library = try util.newLibrary(device, shader_source);
-        defer common.release(library);
+        const library = try metal.newLibrary(device, shader_source);
+        defer metal.release(library);
         return .{
             .command_queue = device.newCommandQueue() orelse return error.NoCommandQueue,
-            .pipeline = try util.newRenderPipeline(device, library, .{}),
-            .positions = try util.newBufferWithData(device, &positions),
-            .colors = try util.newBufferWithData(device, &colors),
+            .pipeline = try metal.newRenderPipeline(device, library, .{}),
+            .positions = try metal.newBufferWithData(device, &positions),
+            .colors = try metal.newBufferWithData(device, &colors),
         };
     }
 
     pub fn deinit(r: *Renderer) void {
-        common.release(r.colors);
-        common.release(r.positions);
-        common.release(r.pipeline);
-        common.release(r.command_queue);
+        metal.release(r.colors);
+        metal.release(r.positions);
+        metal.release(r.pipeline);
+        metal.release(r.command_queue);
     }
 
     pub fn draw(r: *Renderer, view: *objc.MTKView) void {
@@ -88,5 +104,5 @@ const Renderer = struct {
 };
 
 pub fn main() !void {
-    try common.app.run(Renderer, .{ .title = "01 - Primitive" });
+    try metal.app.run(Renderer, .{ .title = "01 - Primitive" });
 }

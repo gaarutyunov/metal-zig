@@ -1,11 +1,27 @@
+// Copyright 2022 Apple Inc.
+// Copyright 2026 German Arutyunov
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Ported to Zig from Apple's LearnMetalCPP sample code, and modified.
+
 //! Port of the metal-cpp "04-instancing" sample: a row of quads drawn with a
 //! single instanced draw call, with a per-instance transform and color that
 //! the CPU animates every frame.
 const std = @import("std");
-const objc = @import("metal");
-const common = @import("common");
-const util = common.util;
-const math = common.math;
+const metal = @import("metal");
+const objc = metal.objc;
+const math = metal.math;
 const f3 = math.f3;
 
 const max_frames_in_flight = 3;
@@ -60,22 +76,22 @@ const Renderer = struct {
     vertex_buffer: *objc.MTLBuffer,
     index_buffer: *objc.MTLBuffer,
     instance_data: [max_frames_in_flight]*objc.MTLBuffer,
-    semaphore: util.FrameSemaphore,
+    semaphore: metal.FrameSemaphore,
     angle: f32 = 0,
     frame: usize = 0,
 
     pub fn init(device: *objc.MTLDevice) !Renderer {
-        const library = try util.newLibrary(device, shader_source);
-        defer common.release(library);
+        const library = try metal.newLibrary(device, shader_source);
+        defer metal.release(library);
 
         var instance_data: [max_frames_in_flight]*objc.MTLBuffer = undefined;
-        for (&instance_data) |*buffer| buffer.* = try util.newBuffer(device, num_instances * @sizeOf(InstanceData));
+        for (&instance_data) |*buffer| buffer.* = try metal.newBuffer(device, num_instances * @sizeOf(InstanceData));
 
         return .{
             .command_queue = device.newCommandQueue() orelse return error.NoCommandQueue,
-            .pipeline = try util.newRenderPipeline(device, library, .{}),
-            .vertex_buffer = try util.newBufferWithData(device, &vertices),
-            .index_buffer = try util.newBufferWithData(device, &indices),
+            .pipeline = try metal.newRenderPipeline(device, library, .{}),
+            .vertex_buffer = try metal.newBufferWithData(device, &vertices),
+            .index_buffer = try metal.newBufferWithData(device, &indices),
             .instance_data = instance_data,
             .semaphore = .init(max_frames_in_flight),
         };
@@ -84,11 +100,11 @@ const Renderer = struct {
     pub fn deinit(r: *Renderer) void {
         // Wait for the frames in flight before releasing their resources.
         r.semaphore.deinit();
-        for (r.instance_data) |buffer| common.release(buffer);
-        common.release(r.index_buffer);
-        common.release(r.vertex_buffer);
-        common.release(r.pipeline);
-        common.release(r.command_queue);
+        for (r.instance_data) |buffer| metal.release(buffer);
+        metal.release(r.index_buffer);
+        metal.release(r.vertex_buffer);
+        metal.release(r.pipeline);
+        metal.release(r.command_queue);
     }
 
     pub fn draw(r: *Renderer, view: *objc.MTKView) void {
@@ -105,7 +121,7 @@ const Renderer = struct {
         r.angle += 0.01;
         const a = r.angle;
         const scl = 0.1;
-        for (util.contentsSlice(InstanceData, instance_buffer), 0..) |*instance, i| {
+        for (metal.contentsSlice(InstanceData, instance_buffer), 0..) |*instance, i| {
             const t = @as(f32, @floatFromInt(i)) / num_instances;
             const xoff = (t * 2.0 - 1.0) + (1.0 / @as(f32, num_instances));
             const yoff = @sin((t + a) * 2.0 * std.math.pi);
@@ -119,7 +135,7 @@ const Renderer = struct {
                 .color = math.f4(t, 1.0 - t, @sin(std.math.pi * 2.0 * t), 1.0),
             };
         }
-        util.didModify(instance_buffer);
+        metal.didModify(instance_buffer);
 
         const encoder = cmd.renderCommandEncoderWithDescriptor(view.currentRenderPassDescriptor()) orelse {
             cmd.commit();
@@ -144,5 +160,5 @@ const Renderer = struct {
 };
 
 pub fn main() !void {
-    try common.app.run(Renderer, .{ .title = "04 - Instancing" });
+    try metal.app.run(Renderer, .{ .title = "04 - Instancing" });
 }

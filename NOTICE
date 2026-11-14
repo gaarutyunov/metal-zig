@@ -1,0 +1,9 @@
+metal-zig
+Copyright 2026 German Arutyunov
+
+The examples in examples/, and src/app.zig and src/math.zig, are ports to
+Zig of Apple's LearnMetalCPP sample code
+(https://developer.apple.com/metal/cpp/), modified from the original:
+
+    Copyright 2022 Apple Inc.
+    Licensed under the Apache License, Version 2.0.

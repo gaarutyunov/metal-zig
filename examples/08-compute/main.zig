@@ -1,11 +1,27 @@
+// Copyright 2022 Apple Inc.
+// Copyright 2026 German Arutyunov
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Ported to Zig from Apple's LearnMetalCPP sample code, and modified.
+
 //! Port of the metal-cpp "08-compute" sample: the textured cubes of
 //! 07-texturing, with the texture generated once on the GPU by a compute
 //! kernel that draws the Mandelbrot set.
 const std = @import("std");
-const objc = @import("metal");
-const common = @import("common");
-const util = common.util;
-const math = common.math;
+const metal = @import("metal");
+const objc = metal.objc;
+const math = metal.math;
 const f3 = math.f3;
 
 const max_frames_in_flight = 3;
@@ -189,25 +205,25 @@ const Renderer = struct {
     compute_pipeline: *objc.MTLComputePipelineState,
     instance_data: [max_frames_in_flight]*objc.MTLBuffer,
     camera_data: [max_frames_in_flight]*objc.MTLBuffer,
-    semaphore: util.FrameSemaphore,
+    semaphore: metal.FrameSemaphore,
     angle: f32 = 0,
     frame: usize = 0,
 
     pub fn init(device: *objc.MTLDevice) !Renderer {
-        const library = try util.newLibrary(device, shader_source);
-        defer common.release(library);
+        const library = try metal.newLibrary(device, shader_source);
+        defer metal.release(library);
 
         var instance_data: [max_frames_in_flight]*objc.MTLBuffer = undefined;
-        for (&instance_data) |*buffer| buffer.* = try util.newBuffer(device, num_instances * @sizeOf(InstanceData));
+        for (&instance_data) |*buffer| buffer.* = try metal.newBuffer(device, num_instances * @sizeOf(InstanceData));
         var camera_data: [max_frames_in_flight]*objc.MTLBuffer = undefined;
-        for (&camera_data) |*buffer| buffer.* = try util.newBuffer(device, @sizeOf(CameraData));
+        for (&camera_data) |*buffer| buffer.* = try metal.newBuffer(device, @sizeOf(CameraData));
 
         var r: Renderer = .{
             .command_queue = device.newCommandQueue() orelse return error.NoCommandQueue,
-            .pipeline = try util.newRenderPipeline(device, library, .{ .depth_pixel_format = depth_pixel_format }),
+            .pipeline = try metal.newRenderPipeline(device, library, .{ .depth_pixel_format = depth_pixel_format }),
             .depth_stencil_state = try buildDepthStencilState(device),
-            .vertex_buffer = try util.newBufferWithData(device, &vertices),
-            .index_buffer = try util.newBufferWithData(device, &indices),
+            .vertex_buffer = try metal.newBufferWithData(device, &vertices),
+            .index_buffer = try metal.newBufferWithData(device, &indices),
             .texture = try buildTexture(device),
             .compute_pipeline = try buildComputePipeline(device),
             .instance_data = instance_data,
@@ -219,19 +235,19 @@ const Renderer = struct {
     }
 
     fn buildComputePipeline(device: *objc.MTLDevice) !*objc.MTLComputePipelineState {
-        const library = try util.newLibrary(device, kernel_source);
-        defer common.release(library);
-        const mandelbrot_fn = try util.newFunction(library, "mandelbrot_set");
-        defer common.release(mandelbrot_fn);
+        const library = try metal.newLibrary(device, kernel_source);
+        defer metal.release(library);
+        const mandelbrot_fn = try metal.newFunction(library, "mandelbrot_set");
+        defer metal.release(mandelbrot_fn);
 
         var err: ?*objc.NSError = null;
         return device.newComputePipelineStateWithFunction_error(mandelbrot_fn, &err) orelse
-            util.fail("creating the compute pipeline", err);
+            metal.fail("creating the compute pipeline", err);
     }
 
     fn buildDepthStencilState(device: *objc.MTLDevice) !*objc.MTLDepthStencilState {
         const desc = objc.MTLDepthStencilDescriptor.alloc().?.init().?;
-        defer common.release(desc);
+        defer metal.release(desc);
         desc.setDepthCompareFunction(objc.MTLCompareFunctionLess);
         desc.setDepthWriteEnabled(1);
         return device.newDepthStencilStateWithDescriptor(desc) orelse error.NoDepthStencilState;
@@ -241,7 +257,7 @@ const Renderer = struct {
     /// sample.
     fn buildTexture(device: *objc.MTLDevice) !*objc.MTLTexture {
         const desc = objc.MTLTextureDescriptor.alloc().?.init().?;
-        defer common.release(desc);
+        defer metal.release(desc);
         desc.setWidth(texture_width);
         desc.setHeight(texture_height);
         desc.setPixelFormat(objc.MTLPixelFormatRGBA8Unorm);
@@ -271,15 +287,15 @@ const Renderer = struct {
     pub fn deinit(r: *Renderer) void {
         // Wait for the frames in flight before releasing their resources.
         r.semaphore.deinit();
-        for (r.camera_data) |buffer| common.release(buffer);
-        for (r.instance_data) |buffer| common.release(buffer);
-        common.release(r.compute_pipeline);
-        common.release(r.texture);
-        common.release(r.index_buffer);
-        common.release(r.vertex_buffer);
-        common.release(r.depth_stencil_state);
-        common.release(r.pipeline);
-        common.release(r.command_queue);
+        for (r.camera_data) |buffer| metal.release(buffer);
+        for (r.instance_data) |buffer| metal.release(buffer);
+        metal.release(r.compute_pipeline);
+        metal.release(r.texture);
+        metal.release(r.index_buffer);
+        metal.release(r.vertex_buffer);
+        metal.release(r.depth_stencil_state);
+        metal.release(r.pipeline);
+        metal.release(r.command_queue);
     }
 
     pub fn draw(r: *Renderer, view: *objc.MTKView) void {
@@ -295,16 +311,16 @@ const Renderer = struct {
         r.semaphore.signalOnCompletion(cmd);
 
         r.angle += 0.002;
-        updateInstances(util.contentsSlice(InstanceData, instance_buffer), r.angle);
-        util.didModify(instance_buffer);
+        updateInstances(metal.contentsSlice(InstanceData, instance_buffer), r.angle);
+        metal.didModify(instance_buffer);
 
         const world = math.identity();
-        util.contents(CameraData, camera_buffer).* = .{
+        metal.contents(CameraData, camera_buffer).* = .{
             .perspective = math.perspective(45.0 * std.math.pi / 180.0, 1.0, 0.03, 500.0),
             .world = world,
             .world_normal = math.discardTranslation(world),
         };
-        util.didModify(camera_buffer);
+        metal.didModify(camera_buffer);
 
         const encoder = cmd.renderCommandEncoderWithDescriptor(view.currentRenderPassDescriptor()) orelse {
             cmd.commit();
@@ -370,7 +386,7 @@ fn updateInstances(instances: []InstanceData, a: f32) void {
 }
 
 pub fn main() !void {
-    try common.app.run(Renderer, .{
+    try metal.app.run(Renderer, .{
         .title = "08 - Compute",
         .clear_color = .{ .red = 0.1, .green = 0.1, .blue = 0.1, .alpha = 1.0 },
         .depth_stencil_pixel_format = depth_pixel_format,

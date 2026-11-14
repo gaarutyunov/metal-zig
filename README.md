@@ -1,10 +1,11 @@
 # metal-zig
 
-Metal examples in Zig, using the **native** AppKit, Metal and MetalKit
-Objective-C headers translated to Zig by `translate-c`. No metal-cpp, no
-hand-written bindings.
+Metal for Zig on macOS, using the **native** AppKit, Metal and MetalKit
+Objective-C headers translated to Zig by `translate-c`. There's no metal-cpp
+and no hand-written bindings. It's a library, `metal`, plus ports of Apple's
+LearnMetalCPP samples that use it.
 
-`src/metal.m` imports the headers:
+[`src/metal.m`](src/metal.m) imports the headers:
 
 ```objc
 #import <objc/runtime.h>
@@ -25,6 +26,136 @@ const encoder = queue.commandBuffer().?.renderCommandEncoderWithDescriptor(pass)
 encoder.drawPrimitives_vertexStart_vertexCount(objc.MTLPrimitiveTypeTriangle, 0, 3);
 encoder.as(objc.MTLCommandEncoder).endEncoding();
 ```
+
+## Installing Zig with Objective-C support
+
+Upstream translate-c can't read Objective-C headers, so you need Zig 0.18
+built from the `objc-import` branch of
+[gaarutyunov/zig](https://github.com/gaarutyunov/zig). Zig vendors arocc and
+translate-c, so that branch already contains the changes from the
+`objc-import` branches of
+[gaarutyunov/arocc](https://github.com/gaarutyunov/arocc) and
+[gaarutyunov/translate-c](https://github.com/gaarutyunov/translate-c). Zig is
+the only thing to build.
+
+The quickest build needs only a C compiler and no LLVM:
+
+```sh
+git clone --branch objc-import https://github.com/gaarutyunov/zig.git
+cd zig
+cc -o bootstrap bootstrap.c
+./bootstrap
+./zig2 build -Denable-llvm=false -Dno-langref -Doptimize=ReleaseFast -p ~/.local/zig-objc
+export PATH="$HOME/.local/zig-objc/bin:$PATH"
+zig version
+```
+
+`./bootstrap` builds `zig2` (about 15 minutes), which then builds and installs
+the compiler and its standard library into `~/.local/zig-objc` (a few
+minutes). `-Dno-langref` skips the language reference, whose doc tests need
+LLVM. Leave `-Doptimize=ReleaseFast` in, because a Debug build of the compiler
+crashes. Add the `export` line to your shell profile to keep the fork on
+`PATH`.
+
+This build has no LLVM backend, so it lacks release-mode optimizations and
+can't compile C or Objective-C sources. metal-zig needs neither. It has been
+tested on an Intel Mac. On Apple Silicon, or to get optimized release builds,
+build the fork with LLVM 23 instead (`brew install llvm lld`), following
+"Building from Source" in the fork's README.
+
+For editor support, build the `objc-import` branch of
+[gaarutyunov/zls](https://github.com/gaarutyunov/zls) with this Zig.
+
+## Using the library
+
+Add the package to your project's `build.zig.zon`:
+
+```sh
+zig fetch --save git+https://github.com/gaarutyunov/metal-zig
+```
+
+Then import the `metal` module in `build.zig`. The module links the
+frameworks it needs, so nothing else is required:
+
+```zig
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const metal = b.dependency("metal", .{ .target = target, .optimize = optimize });
+
+    const exe = b.addExecutable(.{
+        .name = "app",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "metal", .module = metal.module("metal") },
+            },
+        }),
+    });
+    b.installArtifact(exe);
+}
+```
+
+A window that clears to red every frame:
+
+```zig
+const metal = @import("metal");
+const objc = metal.objc;
+
+const Renderer = struct {
+    queue: *objc.MTLCommandQueue,
+
+    pub fn init(device: *objc.MTLDevice) !Renderer {
+        return .{ .queue = device.newCommandQueue() orelse return error.NoCommandQueue };
+    }
+
+    pub fn draw(r: *Renderer, view: *objc.MTKView) void {
+        const cmd = r.queue.commandBuffer() orelse return;
+        const encoder = cmd.renderCommandEncoderWithDescriptor(view.currentRenderPassDescriptor()) orelse return;
+        encoder.as(objc.MTLCommandEncoder).endEncoding();
+        if (view.currentDrawable()) |drawable| cmd.presentDrawable(drawable.as(objc.MTLDrawable));
+        cmd.commit();
+    }
+};
+
+pub fn main() !void {
+    try metal.app.run(Renderer, .{ .title = "Hello Metal" });
+}
+```
+
+What's in [`metal`](src/root.zig):
+
+- `metal.objc`: the translated headers, with every class, protocol, function
+  and constant of AppKit, Foundation, Metal, MetalKit and the Objective-C
+  runtime.
+- [`metal.app`](src/app.zig): `run(Renderer, options)` starts an AppKit
+  application with a menu bar (Cmd-W, Cmd-Q, and an optional extra menu) and
+  a window holding an `MTKView`. It calls `Renderer.init(device)` once,
+  `draw(view)` every frame, and `deinit()` when the app quits, if the
+  renderer has one. The options set the title, the clear color and the depth
+  format. The delegate is an Objective-C class created at runtime with
+  `objc_allocateClassPair`, with Zig functions as method implementations.
+- Helpers ([`src/util.zig`](src/util.zig)):
+  - strings: `nsString`, `zigString`, `release`;
+  - shaders and pipelines: `newLibrary` compiles Metal source, plus
+    `newFunction` and `newRenderPipeline`;
+  - buffers: `newBuffer`, `newBufferWithData`, `contents`, `contentsSlice`,
+    `didModify`;
+  - `FrameSemaphore` limits the frames in flight. It passes
+    `addCompletedHandler:` a block literal built by hand to the Clang block
+    ABI, because translate-c exposes block types as opaque pointers.
+- [`metal.math`](src/math.zig): `float2`, `float3`, `float4`, `float3x3` and
+  `float4x4` with the memory layout of the Metal types, for structs shared
+  with shaders, plus transforms: `perspective`, `rotateX`/`Y`/`Z`,
+  `translate`, `scale`, `mul`. translate-c's `simd_float4x4` can't go in
+  `extern struct`s, because its columns are Zig vectors.
+
+`zig build test` runs the library's tests.
 
 ## Examples
 
@@ -158,37 +289,6 @@ no Info.plist to set `MetalCaptureEnabled` in.
 zig build run-10-frame-debugging
 ```
 
-### [Shared code](examples/common)
-
-The ports share `examples/common`:
-
-- [`app.zig`](examples/common/app.zig) is the AppKit scaffolding of the
-  samples (`MyAppDelegate` and `MyMTKViewDelegate`): the menu bar, the window
-  and the `MTKView`. Each example only provides a `Renderer` with `init`,
-  `draw` and `deinit`. The delegate is an Objective-C class created at
-  runtime with `objc_allocateClassPair`, using Zig functions as method
-  implementations.
-- [`util.zig`](examples/common/util.zig) has helpers for strings, shaders,
-  pipelines and buffers. `FrameSemaphore` limits the frames in flight. It
-  passes `addCompletedHandler:` a block literal built by hand to the Clang
-  block ABI, because translate-c exposes block types as opaque pointers.
-- [`math.zig`](examples/common/math.zig) is the samples' tiny math library.
-  Its `float3`, `float4x4` and other types have the memory layout of the
-  Metal types. translate-c's `simd_float4x4` cannot go in `extern struct`s,
-  because its columns are Zig vectors.
-
-`zig build test` runs the math tests.
-
-## Requirements
-
-A Zig 0.18 build with Objective-C support in translate-c, from the
-`objc-import` branches of:
-
-- https://github.com/gaarutyunov/zig
-- https://github.com/gaarutyunov/arocc
-- https://github.com/gaarutyunov/translate-c
-- https://github.com/gaarutyunov/zls (editor support)
-
 ## Media
 
 `tools/record.sh` regenerates the media in `docs/`. The static windows are
@@ -196,3 +296,9 @@ captured with `screencapture -l <window id>`, and the animated ones are
 recorded to GIFs by `tools/windowgif.swift`, using CoreGraphics and ImageIO.
 It leaves out `10-frame-debugging`, which opens Xcode with its capture after
 three seconds.
+
+## License
+
+[Apache License 2.0](LICENSE). The examples, and the app scaffolding and math
+library in `src/`, are ports of Apple's LearnMetalCPP sample code, also
+Apache 2.0. See [NOTICE](NOTICE).
