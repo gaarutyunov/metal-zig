@@ -7,7 +7,17 @@ const Example = struct {
 
 const examples = [_]Example{
     .{ .name = "00-device", .description = "List the Metal GPU devices" },
+    .{ .name = "00-window", .description = "Open a window with a Metal view" },
     .{ .name = "01-primitive", .description = "Render a gradient triangle in a window" },
+    .{ .name = "02-argbuffers", .description = "Pass vertex data through an argument buffer" },
+    .{ .name = "03-animation", .description = "Animate a triangle with per-frame data" },
+    .{ .name = "04-instancing", .description = "Draw many quads with instanced rendering" },
+    .{ .name = "05-perspective", .description = "Draw cubes with a perspective projection" },
+    .{ .name = "06-lighting", .description = "Light the cubes with per-vertex normals" },
+    .{ .name = "07-texturing", .description = "Texture the cubes with a checkerboard" },
+    .{ .name = "08-compute", .description = "Generate the texture with a compute kernel" },
+    .{ .name = "09-compute-to-render", .description = "Animate the compute texture every frame" },
+    .{ .name = "10-frame-debugging", .description = "Capture a GPU trace programmatically" },
 };
 
 pub fn build(b: *std.Build) void {
@@ -23,6 +33,21 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }).createModule();
 
+    // Code shared by the examples: the AppKit scaffolding, helpers and math.
+    const common = b.createModule(.{
+        .root_source_file = b.path("examples/common/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "metal", .module = metal },
+        },
+    });
+
+    const test_step = b.step("test", "Run the unit tests");
+    const tests = b.addTest(.{ .root_module = common });
+    tests.root_module.linkFramework("Foundation", .{});
+    test_step.dependOn(&b.addRunArtifact(tests).step);
+
     for (examples) |example| {
         const exe = b.addExecutable(.{
             .name = example.name,
@@ -33,6 +58,7 @@ pub fn build(b: *std.Build) void {
                 .link_libc = true,
                 .imports = &.{
                     .{ .name = "metal", .module = metal },
+                    .{ .name = "common", .module = common },
                 },
             }),
         });
