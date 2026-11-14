@@ -28,18 +28,7 @@ encoder.as(objc.MTLCommandEncoder).endEncoding();
 
 ## Examples
 
-### [00-device](examples/00-device/main.zig)
-
-Lists the Metal GPU devices and their properties, and creates a MetalKit
-`MTKTextureLoader` for the default device.
-
-```sh
-zig build run-00-device
-```
-
-![00-device](docs/00-device.gif)
-
-The rest are ports of Apple's [metal-cpp](https://developer.apple.com/metal/cpp/)
+The examples are ports of Apple's [metal-cpp](https://developer.apple.com/metal/cpp/)
 "LearnMetalCPP" samples, one per sample, with the same shaders and the same
 steps. Cmd-W closes the window and Cmd-Q quits.
 
@@ -202,10 +191,8 @@ A Zig 0.18 build with Objective-C support in translate-c, from the
 
 ## Media
 
-`tools/record.sh` regenerates the media in `docs/`: the terminal recording is
-made with [asciinema](https://asciinema.org) and rendered to a GIF with
-[agg](https://github.com/asciinema/agg). The static windows are captured with
-`screencapture -l <window id>`, and the animated ones are recorded to GIFs by
-`tools/windowgif.swift`, using CoreGraphics and ImageIO. It leaves out
-`10-frame-debugging`, which opens Xcode with its capture after three
-seconds.
+`tools/record.sh` regenerates the media in `docs/`. The static windows are
+captured with `screencapture -l <window id>`, and the animated ones are
+recorded to GIFs by `tools/windowgif.swift`, using CoreGraphics and ImageIO.
+It leaves out `10-frame-debugging`, which opens Xcode with its capture after
+three seconds.

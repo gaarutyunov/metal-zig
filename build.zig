@@ -6,7 +6,6 @@ const Example = struct {
 };
 
 const examples = [_]Example{
-    .{ .name = "00-device", .description = "List the Metal GPU devices" },
     .{ .name = "00-window", .description = "Open a window with a Metal view" },
     .{ .name = "01-primitive", .description = "Render a gradient triangle in a window" },
     .{ .name = "02-argbuffers", .description = "Pass vertex data through an argument buffer" },
