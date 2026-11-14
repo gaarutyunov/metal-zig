@@ -1,4 +1,4 @@
-# zig-metal-device
+# metal-zig
 
 The classic Metal "hello triangle" in Zig: a window with an `MTKView` drawing a
 gradient triangle, modelled on the
