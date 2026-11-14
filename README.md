@@ -1,12 +1,8 @@
 # metal-zig
 
-The classic Metal "hello triangle" in Zig: a window with an `MTKView` drawing a
-gradient triangle, modelled on the
-[metal-cpp](https://developer.apple.com/metal/cpp/) `01-primitive` sample, but
-**without metal-cpp**. The native AppKit, Metal and MetalKit Objective-C
-headers are translated to Zig by `translate-c`.
-
-![screenshot](docs/screenshot.png)
+Metal examples in Zig, using the **native** AppKit, Metal and MetalKit
+Objective-C headers translated to Zig by `translate-c`. No metal-cpp, no
+hand-written bindings.
 
 `src/metal.m` imports the headers:
 
@@ -19,19 +15,44 @@ headers are translated to Zig by `translate-c`.
 
 and `build.zig` turns it into a Zig module with `b.addTranslateC`. Objective-C
 classes and protocols become opaque Zig types whose methods send Objective-C
-messages:
+messages, and `obj.as(T)` casts to a superclass or protocol to reach inherited
+methods:
 
 ```zig
-const cmd = queue.commandBuffer() orelse return;
-const encoder = cmd.renderCommandEncoderWithDescriptor(view.currentRenderPassDescriptor()) orelse return;
-encoder.setRenderPipelineState(pipeline);
+const device = objc.MTLCreateSystemDefaultDevice() orelse return error.NoMetalDevice;
+const queue = device.newCommandQueue().?;
+const encoder = queue.commandBuffer().?.renderCommandEncoderWithDescriptor(pass).?;
 encoder.drawPrimitives_vertexStart_vertexCount(objc.MTLPrimitiveTypeTriangle, 0, 3);
 encoder.as(objc.MTLCommandEncoder).endEncoding();
 ```
 
-`obj.as(T)` casts to a superclass or protocol to reach inherited methods. The
-application and `MTKView` delegates are Objective-C classes created at runtime
-with `objc_allocateClassPair`, using Zig functions as method implementations.
+## Examples
+
+### 00-device
+
+Lists the Metal GPU devices and their properties, and creates a MetalKit
+`MTKTextureLoader` for the default device.
+
+```sh
+zig build run-00-device
+```
+
+![00-device](docs/00-device.gif)
+
+### 01-primitive
+
+The classic gradient triangle, modelled on the
+[metal-cpp](https://developer.apple.com/metal/cpp/) `01-primitive` sample: an
+AppKit window with an `MTKView`, a shader compiled at runtime and one triangle
+with per-vertex colors. The application and `MTKView` delegates are
+Objective-C classes created at runtime with `objc_allocateClassPair`, using Zig
+functions as method implementations. Cmd-W closes the window and Cmd-Q quits.
+
+```sh
+zig build run-01-primitive
+```
+
+<img src="docs/01-primitive.png" alt="01-primitive" width="512">
 
 ## Requirements
 
@@ -43,10 +64,9 @@ A Zig 0.18 build with Objective-C support in translate-c, from the
 - https://github.com/gaarutyunov/translate-c
 - https://github.com/gaarutyunov/zls (editor support)
 
-## Usage
+## Media
 
-```sh
-zig build run
-```
-
-Cmd-W closes the window and Cmd-Q quits.
+`tools/record.sh` regenerates the media in `docs/`: the terminal recording is
+made with [asciinema](https://asciinema.org) and rendered to a GIF with
+[agg](https://github.com/asciinema/agg), and the window is captured with
+`screencapture -l <window id>`.
