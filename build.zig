@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "metal-device",
+        .name = "metal-triangle",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
@@ -28,6 +28,8 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkFramework("Metal", .{});
     exe.root_module.linkFramework("MetalKit", .{});
     exe.root_module.linkFramework("Foundation", .{});
+    exe.root_module.linkFramework("AppKit", .{});
+    exe.root_module.linkFramework("QuartzCore", .{});
     // Command line tools must link CoreGraphics for MTLCreateSystemDefaultDevice
     // to find a device.
     exe.root_module.linkFramework("CoreGraphics", .{});
@@ -37,5 +39,5 @@ pub fn build(b: *std.Build) void {
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
     run.addPassthruArgs();
-    b.step("run", "Look up the Metal GPU devices").dependOn(&run.step);
+    b.step("run", "Run the triangle example").dependOn(&run.step);
 }
